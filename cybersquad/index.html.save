@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Cyber Squad</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        body {
+            background-color: black;
+            color: #00ff00;
+            font-family: monospace;
+        }
+        video {
+            margin: 10px;
+            border: 2px solid #00ff00;
+        }
+        #chat {
+            border: 1px solid #00ff00;
+            height: 200px;
+            overflow-y: scroll;
+            padding: 10px;
+        }
+        input, button {
+            background: black;
+            color: #00ff00;
+            border: 1px solid #00ff00;
+        }
+    </style>
+</head>
+<body>
+
+<h2>CYBER SQUAD TERMINAL</h2>
+<a href="/logout">Logout</a>
+
+<h3>Upload Reel</h3>
+<form method="POST" enctype="multipart/form-data">
+    <input type="file" name="reel" required>
+    <button type="submit">Upload</button>
+</form>
+
+<h3>Reels Feed</h3>
+{% for reel in reels %}
+<video width="300" controls>
+    <source src="{{ url_for('static', filename='uploads/' + reel.filename) }}">
+</video>
+{% endfor %}
+
+<h3>Squad Chat</h3>
+<div id="chat"></div>
+<input id="message" placeholder="Type message...">
+<button onclick="sendMessage()">Send</button>
+
+<script>
+var socket = io();
+
+socket.on("message", function(msg) {
+    var chat = document.getElementById("chat");
+    chat.innerHTML += "<p>> " + msg + "</p>";
+});
+
+function sendMessage() {
+    var input = document.getElementById("message");
+    socket.send(input.value);
+    input.value = "";
+}
+</script>
+
+</body>
+</html>

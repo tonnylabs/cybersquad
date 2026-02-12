@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cyber Squad</title>
+<script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+<style>
+* {margin:0; padding:0; box-sizing:border-box;}
+body {font-family: Arial; background:#0d1117; color:#c9d1d9;}
+header {display:flex; justify-content:space-between; padding:15px 30px; background:#161b22; border-bottom:1px solid #30363d;}
+header h1 {color:#58a6ff;} header a {color:#58a6ff; text-decoration:none;}
+.container {display:flex; flex-wrap:wrap; justify-content:center; padding:20px;}
+.reel, .chatbox {background:#161b22; border:1px solid #30363d; border-radius:10px; margin:10px; padding:15px;}
+.reel {width:300px;} .chatbox {width:300px; height:400px; display:flex; flex-direction:column; justify-content:space-between;}
+video {width:100%; border-radius:10px; margin-bottom:10px;}
+#chat {overflow-y:auto; height:300px; border:1px solid #30363d; padding:10px; border-radius:8px; background:#0d1117;}
+#msg {padding:8px; border-radius:5px; border:1px solid #30363d; width:calc(100% - 60px);}
+button {padding:8px 12px; border:none; background:#58a6ff; color:white; border-radius:5px; cursor:pointer;}
+.chat-input {display:flex; margin-top:10px; gap:5px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cyber Squad</h1>
+  <a href="/logout">Logout</a>
+</header>
+
+<div class="container">
+
+  <div class="reel">
+    <h3>Upload Reel</h3>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="reel" required>
+      <button type="submit">Upload</button>
+    </form>
+  </div>
+
+  <div class="reel">
+    <h3>Reels Feed</h3>
+    {% for reel in reels %}
+      <video controls>
+        <source src="{{ url_for('static', filename='uploads/' + reel.filename) }}">
+      </video>
+    {% endfor %}
+  </div>
+
+  <div class="chatbox">
+    <h3>Squad Chat</h3>
+    <div id="chat"></div>
+    <div class="chat-input">
+      <input id="msg" placeholder="Type message...">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var socket = io();
+socket.on("message", function(msg){
+  var decoded = atob(msg);
+  var chat = document.getElementById("chat");
+  chat.innerHTML += "<p>> "+decoded+"</p>";
+  chat.scrollTop = chat.scrollHeight;
+});
+function sendMessage(){
+  var m=document.getElementById("msg");
+  if(m.value.trim()!=""){socket.send(m.value); m.value="";}
+}
+</script>
+
+</body>
+</html>
