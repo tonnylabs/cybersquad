@@ -1,103 +1,59 @@
-from flask import Flask, render_template, request, redirect, session
-from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO
-import os
-import cloudinary
-import cloudinary.uploader
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { font-family: Arial; margin:0; padding:0; background:#0d1117; color:#c9d1d9; }
+.container { width: 100%; max-width: 400px; margin:auto; padding: 10px; }
+video { width: 100%; border-radius: 10px; }
+input, button { width: 100%; margin:5px 0; }
+</style>
+<script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body>
+<div class="container">
+<h2>Welcome {{ session.user }}</h2>
 
-app = Flask(__name__)
-app.secret_key = "your_secret_key"
+<form action="/upload" method="POST" enctype="multipart/form-data">
+  <input type="file" name="reel" required>
+  <button type="submit">Upload Reel</button>
+</form>
 
-# Database setup
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cybersquad.db"
-db = SQLAlchemy(app)
-socketio = SocketIO(app)
+{% for reel in reels %}
+  <div class="reel">
+    <video controls>
+      <source src="{{ reel.filename }}">
+    </video>
+    <p>{{ reel.likes }} Likes <a href="/like/{{ reel.id }}">👍</a></p>
+    <form method="POST" action="/comment/{{ reel.id }}">
+      <input name="comment" placeholder="Add comment..." required>
+      <button type="submit">Comment</button>
+    </form>
+    {% for c in reel.comments %}
+      <p><strong>{{ c.username }}:</strong> {{ c.content }}</p>
+    {% endfor %}
+  </div>
+{% endfor %}
 
-# Cloudinary configuration
-cloudinary.config(
-    cloud_name='dfsj1bf3m',
-    api_key='YOUR_API_KEY_HERE',
-    api_secret='Rpcv6JADM752Y5bGJqiHEX4vEro'
-)
+<h3>Real-time Chat</h3>
+<div id="chatbox" style="border:1px solid #ccc; height:150px; overflow-y:scroll;"></div>
+<input id="msg" placeholder="Type message">
+<button onclick="sendMessage()">Send</button>
 
-# Models
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(100))
+<script>
+const socket = io();
+function sendMessage(){
+  const msg = document.getElementById('msg').value;
+  socket.emit("send_message", {user:"{{ session.user }}", message: msg});
+  document.getElementById('msg').value = "";
+}
+socket.on("receive_message", function(data){
+  const chatbox = document.getElementById("chatbox");
+  chatbox.innerHTML += "<p><strong>"+data.user+":</strong> "+data.message+"</p>";
+  chatbox.scrollTop = chatbox.scrollHeight;
+});
+</script>
 
-class Reel(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(300))
-    likes = db.Column(db.Integer, default=0)
-    comments = db.relationship('Comment', backref='reel', lazy=True)
-
-class Comment(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
-    username = db.Column(db.String(100))
-    content = db.Column(db.String(300))
-
-# Routes
-@app.route("/")
-def index():
-    return redirect("/login")
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        user = User.query.filter_by(username=request.form["username"]).first()
-        if user and user.password == request.form["password"]:
-            session["user"] = user.username
-            return redirect("/dashboard")
-    return render_template("login.html")
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        new_user = User(username=request.form["username"], password=request.form["password"])
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect("/login")
-    return render_template("register.html")
-
-@app.route("/dashboard", methods=["GET", "POST"])
-def dashboard():
-    reels = Reel.query.all()
-    return render_template("dashboard.html", reels=reels)
-
-@app.route("/upload", methods=["POST"])
-def upload():
-    file = request.files["reel"]
-    if file:
-        upload_result = cloudinary.uploader.upload(file, resource_type="video")
-        new_reel = Reel(filename=upload_result["secure_url"])
-        db.session.add(new_reel)
-        db.session.commit()
-    return redirect("/dashboard")
-
-@app.route("/like/<int:reel_id>")
-def like(reel_id):
-    reel = Reel.query.get_or_404(reel_id)
-    reel.likes += 1
-    db.session.commit()
-    return redirect("/dashboard")
-
-@app.route("/comment/<int:reel_id>", methods=["POST"])
-def comment(reel_id):
-    content = request.form["comment"]
-    new_comment = Comment(reel_id=reel_id, username=session["user"], content=content)
-    db.session.add(new_comment)
-    db.session.commit()
-    return redirect("/dashboard")
-
-# Real-time chat
-@socketio.on("send_message")
-def handle_message(data):
-    socketio.emit("receive_message", data, broadcast=True)
-
-if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-    port = int(os.environ.get("PORT", 5000))
-    socketio.run(app, host="0.0.0.0", port=port, debug=True)
+</div>
+</body>
+</html>

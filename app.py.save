@@ -16,7 +16,7 @@ socketio = SocketIO(app)
 # Cloudinary configuration
 cloudinary.config(
     cloud_name='dfsj1bf3m',
-    api_key='931867124637285',
+    api'YOUR_API_KEY_HERE',
     api_secret='Rpcv6JADM752Y5bGJqiHEX4vEro'
 )
 
