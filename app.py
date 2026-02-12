@@ -1,81 +1,103 @@
-from flask import Flask, render_template, request, redirect, session, url_for
+from flask import Flask, render_template, request, redirect, session
 from flask_sqlalchemy import SQLAlchemy
-from flask_socketio import SocketIO, send
-from werkzeug.security import generate_password_hash, check_password_hash
-import os, base64
+from flask_socketio import SocketIO
+import os
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
-app.secret_key = "cybersquadsecret"
+app.secret_key = "your_secret_key"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///database.db"
-app.config["UPLOAD_FOLDER"] = "static/uploads"
-
+# Database setup
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cybersquad.db"
 db = SQLAlchemy(app)
 socketio = SocketIO(app)
 
-# USER MODEL
+# Cloudinary configuration
+cloudinary.config(
+    cloud_name='dfsj1bf3m',
+    api_key='YOUR_API_KEY_HERE',
+    api_secret='Rpcv6JADM752Y5bGJqiHEX4vEro'
+)
+
+# Models
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(100), unique=True)
-    password = db.Column(db.String(200))
+    password = db.Column(db.String(100))
 
-# REEL MODEL
 class Reel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    filename = db.Column(db.String(200))
+    filename = db.Column(db.String(300))
+    likes = db.Column(db.Integer, default=0)
+    comments = db.relationship('Comment', backref='reel', lazy=True)
 
-# REGISTER ROUTE
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "POST":
-        hashed = generate_password_hash(request.form["password"])
-        new_user = User(username=request.form["username"], password=hashed)
-        db.session.add(new_user)
-        db.session.commit()
-        return redirect("/")
-    return render_template("register.html")
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    reel_id = db.Column(db.Integer, db.ForeignKey('reel.id'), nullable=False)
+    username = db.Column(db.String(100))
+    content = db.Column(db.String(300))
 
-# LOGIN ROUTE
-@app.route("/", methods=["GET", "POST"])
+# Routes
+@app.route("/")
+def index():
+    return redirect("/login")
+
+@app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         user = User.query.filter_by(username=request.form["username"]).first()
-        if user and check_password_hash(user.password, request.form["password"]):
+        if user and user.password == request.form["password"]:
             session["user"] = user.username
             return redirect("/dashboard")
     return render_template("login.html")
 
-# DASHBOARD
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        new_user = User(username=request.form["username"], password=request.form["password"])
+        db.session.add(new_user)
+        db.session.commit()
+        return redirect("/login")
+    return render_template("register.html")
+
 @app.route("/dashboard", methods=["GET", "POST"])
 def dashboard():
-    if "user" not in session:
-        return redirect("/")
-
-    if request.method == "POST":
-        file = request.files["reel"]
-        if file:
-            filepath = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
-            file.save(filepath)
-            db.session.add(Reel(filename=file.filename))
-            db.session.commit()
-
     reels = Reel.query.all()
     return render_template("dashboard.html", reels=reels)
 
-# LOGOUT
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect("/")
+@app.route("/upload", methods=["POST"])
+def upload():
+    file = request.files["reel"]
+    if file:
+        upload_result = cloudinary.uploader.upload(file, resource_type="video")
+        new_reel = Reel(filename=upload_result["secure_url"])
+        db.session.add(new_reel)
+        db.session.commit()
+    return redirect("/dashboard")
 
-# REAL-TIME CHAT
-@socketio.on("message")
-def handle_message(msg):
-    encrypted = base64.b64encode(msg.encode()).decode()
-    send(encrypted, broadcast=True)
+@app.route("/like/<int:reel_id>")
+def like(reel_id):
+    reel = Reel.query.get_or_404(reel_id)
+    reel.likes += 1
+    db.session.commit()
+    return redirect("/dashboard")
 
-# RUN APP ON ALL INTERFACES
+@app.route("/comment/<int:reel_id>", methods=["POST"])
+def comment(reel_id):
+    content = request.form["comment"]
+    new_comment = Comment(reel_id=reel_id, username=session["user"], content=content)
+    db.session.add(new_comment)
+    db.session.commit()
+    return redirect("/dashboard")
+
+# Real-time chat
+@socketio.on("send_message")
+def handle_message(data):
+    socketio.emit("receive_message", data, broadcast=True)
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    socketio.run(app, host="0.0.0.0", port=port, debug=True)
